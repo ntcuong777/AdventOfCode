@@ -21,10 +21,13 @@
                {:ranges [] :ingredients nil})))
 
 (defn preprocess-input [data]
-  (let [data-w-sorted-ranges (assoc data :ranges (vec (map vec (sort (fn [a b]
-                                                                       (compare (vec a) (vec b)))
-                                                                     (:ranges data)))))
-        final-data (assoc data-w-sorted-ranges :ranges-upper-prefix-max
+  (let [data-w-sorted-ranges (assoc data
+                                    :ranges
+                                    (vec (map vec (sort (fn [a b]
+                                                          (compare (vec a) (vec b)))
+                                                        (:ranges data)))))
+        final-data (assoc data-w-sorted-ranges
+                          :ranges-upper-prefix-max
                           (vec (reduce (fn [acc curr]
                                          (conj acc (max (last curr)
                                                         (if (empty? acc)
@@ -41,6 +44,9 @@
         first-larger-idx (let [found-idx (Collections/binarySearch lower-bound-ranges (+ ingr 1))]
                            ;; (println "Binary search for" (+ ingr 1) "in" lower-bound-ranges "found idx:" found-idx)
                            (if (neg? found-idx)
+                             ;; If not found, binarySearch returns found-idx = (-insertion-point - 1)
+                             ;; -> to get the first index where value is larger, we need to get
+                             ;; insertion-point, which is -found-idx - 1
                              (- (- found-idx) 1)
                              found-idx))
         largest-upper-bound-til-first-larger (if (> first-larger-idx 0)
