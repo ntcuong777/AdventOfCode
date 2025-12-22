@@ -24,24 +24,31 @@
     (apply max valid-areas)))
 
 (defn find-first-vert [vert-lines x y direction]
-  (let [lines (case direction
-                :left vert-lines ;; assuming sorted low-to-high x
-                :right (reverse vert-lines))
+  (let [lines (if (= direction :left)
+                vert-lines
+                (reverse vert-lines))
         default-if-none (case direction
                           :left 0
                           :right Long/MAX_VALUE)
+        x-filter (fn [vx]
+                   (case direction
+                     :left (<= vx x)
+                     :right (> vx x)))
         found-line (->> lines
                         (filter (fn [{vx :x vy-range :y}]
-                                  (and (< vx x)
-                                       (<= (inc (first vy-range))
-                                           y
-                                           (second vy-range)))))
+                                  (let [min-y (apply min vy-range)
+                                        max-y (apply max vy-range)]
+                                    (and (x-filter vx)
+                                         (<= (inc min-y)
+                                             y
+                                             max-y)))))
                         last)]
+    (println default-if-none "for" direction "at x" x "y" y "found line:" found-line)
     (if (nil? found-line)
       default-if-none
       (:x found-line))))
 
-(def debug? false)
+(def debug? true)
 
 (defmacro spy [label & body]
   (if debug?
@@ -101,6 +108,7 @@
       nil)))
 
 (defn pair-point-and-get-max-area [pt other-pts max-y-per-xs x-bounds]
+  (println "Pairing point" pt " with " other-pts " and x-bounds " x-bounds " where max-y-per-xs is " max-y-per-xs)
   (let [[px py] pt
         [min-x max-x] x-bounds
         valid-pts (filter (fn [[ox oy]]
@@ -124,18 +132,20 @@
   "Assuming lines are pre-sorted appropriately and horiz-line is traversed
 in low-to-high y order"
   [horiz-line all-vert-lines all-horiz-lines]
+  (println "Considering horiz line:" horiz-line " with vert lines:" all-vert-lines " and horiz lines:" all-horiz-lines)
   (let [{hy :y} horiz-line
-        anchor-pts (map (fn [[x y]]
-                          {:point [x y]
-                           :x-boundary [(find-first-vert all-vert-lines
-                                                         x
-                                                         hy
-                                                         :left)
-                                        (find-first-vert all-vert-lines
-                                                         x
-                                                         hy
-                                                         :right)]})
-                        (lines-to-points [horiz-line]))
+        anchor-pts (spy "anchor-pts"
+                        (map (fn [[x y]]
+                               {:point [x y]
+                                :x-boundary [(find-first-vert all-vert-lines
+                                                              x
+                                                              hy
+                                                              :left)
+                                             (find-first-vert all-vert-lines
+                                                              x
+                                                              hy
+                                                              :right)]})
+                             (lines-to-points [horiz-line])))
         eq-horiz-lines (spy "eq-horiz-lines"
                             (filter (fn [{ly :y}]
                                       (= ly hy))
@@ -184,6 +194,7 @@ in low-to-high y order"
         final-max-eq (if (seq max-area-eq-pts)
                        (apply max max-area-eq-pts)
                        0)]
+    (println "Max lower:" final-max-lower " Max eq:" final-max-eq)
     (max final-max-lower final-max-eq)))
 
 (defn largest-red-green-rect [points] ;
@@ -222,4 +233,4 @@ in low-to-high y order"
 (def part1-real-brute (largest-rect-brute real-input))
 
 (def part2-sample-red-green (largest-red-green-rect sample-input))
-(def part2-real-red-green (largest-red-green-rect real-input))
+;; (def part2-real-red-green (largest-red-green-rect real-input))
