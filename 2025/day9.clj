@@ -2,18 +2,21 @@
   (:require [clojure.string :as str]
             [clojure.set :as set]))
 
-(defn parse-input [inp-file]
+(defn parse-input
+  [inp-file]
   (->> (slurp inp-file)
        str/split-lines
        (map #(let [[x y] (vec (str/split % #","))]
                [(Long/parseLong x) (Long/parseLong y)]))))
 
-(defn area [[x1 y1] [x2 y2]]
+(defn area
+  [[x1 y1] [x2 y2]]
   (let [width (inc (Math/abs (- x2 x1)))
         height (inc (Math/abs (- y2 y1)))]
     (* width height)))
 
-(defn largest-rect-brute [points]
+(defn largest-rect-brute
+  [points]
   (let [point-pairs (for [p1 points
                           p2 points
                           :when (not= p1 p2)]
@@ -23,7 +26,8 @@
                          point-pairs)]
     (apply max valid-areas)))
 
-(defn find-first-vert [vert-lines x y direction]
+(defn find-first-vert
+  [vert-lines x y direction]
   (let [lines (if (= direction :left)
                 vert-lines
                 (reverse vert-lines))
@@ -43,21 +47,23 @@
                                              y
                                              max-y)))))
                         last)]
-    (println default-if-none "for" direction "at x" x "y" y "found line:" found-line)
+    ;; (println default-if-none "for" direction "at x" x "y" y "found line:" found-line)
     (if (nil? found-line)
       default-if-none
       (:x found-line))))
 
-(def debug? true)
+(def debug? false)
 
-(defmacro spy [label & body]
+(defmacro spy
+  [label & body]
   (if debug?
     `(let [result# (do ~@body)]
        (println ~label ":" result#)
        result#)
     `(do ~@body)))
 
-(defn lines-to-points [lines]
+(defn lines-to-points
+  [lines]
   (apply set/union
          (map (fn [{x-maybe-range :x y-maybe-range :y}]
                 (set (for [x (if (seqable? x-maybe-range)
@@ -69,8 +75,9 @@
                        [x y])))
               lines)))
 
-(defn get-max-y-for-x [horiz-lines x & {:keys [default-if-none]
-                                        :or {default-if-none 0}}]
+(defn get-max-y-for-x
+  [horiz-lines x & {:keys [default-if-none]
+                    :or {default-if-none 0}}]
   (let [relevant-lines (filter (fn [{x-range :x}]
                                  (and (<= (first x-range) x)
                                       (>= (second x-range) x)))
@@ -83,8 +90,9 @@
       default-if-none
       (:y max-y-line))))
 
-(defn get-max-y-for-xs [horiz-lines xs & {:keys [default-if-none]
-                                          :or {default-if-none 0}}]
+(defn get-max-y-for-xs
+  [horiz-lines xs & {:keys [default-if-none]
+                     :or {default-if-none 0}}]
   (or (apply merge
              (map (fn [x]
                     (let [max-y (get-max-y-for-x horiz-lines
@@ -94,12 +102,13 @@
                   xs))
       {}))
 
-(defn max-y-in-range [max-y-per-xs x-range]
+(defn max-y-in-range
+  [max-y-per-xs x-range]
   (let [[min-x max-x] [(apply min x-range)
                        (apply max x-range)]
         ys (map (fn [[x y]]
                   (if (<= min-x x max-x)
-                    y ;; some y can be nil if no lines exist at that x
+                    y ; some y can be nil if no lines exist at that x
                     0))
                 max-y-per-xs)]
     (if (and (seq ys)
@@ -107,8 +116,9 @@
       (apply max ys)
       nil)))
 
-(defn pair-point-and-get-max-area [pt other-pts max-y-per-xs x-bounds]
-  (println "Pairing point" pt " with " other-pts " and x-bounds " x-bounds " where max-y-per-xs is " max-y-per-xs)
+(defn pair-point-and-get-max-area
+  [pt other-pts max-y-per-xs x-bounds]
+  ;; (println "Pairing point" pt " with " other-pts " and x-bounds " x-bounds " where max-y-per-xs is " max-y-per-xs)
   (let [[px py] pt
         [min-x max-x] x-bounds
         valid-pts (filter (fn [[ox oy]]
@@ -116,14 +126,14 @@
                                  (<= oy py)
                                  (= oy (max-y-per-xs ox))))
                           other-pts)
-        valid-areas (for [[ox oy] valid-pts
-                          :let [max-y (max-y-in-range max-y-per-xs [px ox])]
-                          :when (or (and (not (nil? max-y))
-                                         (= max-y oy))
-                                    (and (nil? max-y)
-                                         (= oy py)))
-                          :let [area-val (area pt [ox oy])]]
-                      area-val)]
+        valid-areas (doall (for [[ox oy] valid-pts
+                                 :let [max-y (max-y-in-range max-y-per-xs [px ox])]
+                                 :when (or (and (not (nil? max-y))
+                                                (<= max-y oy))
+                                           (and (nil? max-y)
+                                                (= oy py)))
+                                 :let [area-val (area pt [ox oy])]]
+                             area-val))]
     (if (seq valid-areas)
       (apply max valid-areas)
       0)))
@@ -132,7 +142,7 @@
   "Assuming lines are pre-sorted appropriately and horiz-line is traversed
 in low-to-high y order"
   [horiz-line all-vert-lines all-horiz-lines]
-  (println "Considering horiz line:" horiz-line " with vert lines:" all-vert-lines " and horiz lines:" all-horiz-lines)
+  ;; (println "Considering horiz line:" horiz-line " with vert lines:" all-vert-lines " and horiz lines:" all-horiz-lines)
   (let [{hy :y} horiz-line
         anchor-pts (spy "anchor-pts"
                         (map (fn [[x y]]
@@ -161,7 +171,7 @@ in low-to-high y order"
         considering-xs (spy "considering-xs"
                             (apply set/union (map (fn [{x-range :x}]
                                                     (set x-range))
-                                                  lower-horiz-lines)))
+                                                  (conj lower-horiz-lines horiz-line))))
         xs-with-max-y (spy "xs-with-max-y"
                            (get-max-y-for-xs lower-horiz-lines
                                              considering-xs
@@ -194,10 +204,12 @@ in low-to-high y order"
         final-max-eq (if (seq max-area-eq-pts)
                        (apply max max-area-eq-pts)
                        0)]
-    (println "Max lower:" final-max-lower " Max eq:" final-max-eq)
+    ;; (println "Max lower:" final-max-lower " Max eq:" final-max-eq)
     (max final-max-lower final-max-eq)))
 
-(defn largest-red-green-rect [points] ;
+(defn largest-red-green-rect
+  [points]
+  ;;
   (let [lines (map #(vector %1 %2)
                    points
                    (conj (vec (rest points)) (first points)))
@@ -227,10 +239,29 @@ in low-to-high y order"
       0)))
 
 (def sample-input (parse-input "2025/day9_sample.txt"))
+
+;;
+;; This sample looks like this:
+;; ..............................
+;; .......#000#..................
+;; .......0...0..................
+;; ..#0000#000#..................
+;; ..0........0..................
+;; #0#000000#.0..................
+;; 0.0......0.0..................
+;; ###000000#0#..................
+;; .0.......0....................
+;; .0.......0....................
+;; .0.......0....................
+;; .0.......0....................
+;; .#0000000#....................
+;; ..............................
+(def hand-sample-input (parse-input "2025/day9_sample2.txt"))
 (def real-input (parse-input "2025/day9_input.txt"))
 
 (def part1-sample-brute (largest-rect-brute sample-input))
 (def part1-real-brute (largest-rect-brute real-input))
 
 (def part2-sample-red-green (largest-red-green-rect sample-input))
+(def part2-sample2-red-green (largest-red-green-rect hand-sample-input))
 ;; (def part2-real-red-green (largest-red-green-rect real-input))
