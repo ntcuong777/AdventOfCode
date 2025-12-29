@@ -9,16 +9,27 @@
        (map #(let [[x y] (vec (str/split % #","))]
                [(Long/parseLong x) (Long/parseLong y)]))))
 
+(defn make-point
+  [x y]
+  {:x x
+   :y y})
+
+(defn points-as-map [vec-points]
+  (vec (map (fn [[x y]]
+              (make-point x y))
+            vec-points)))
+
 (defn area
-  [[x1 y1] [x2 y2]]
+  [{x1 :x y1 :y} {x2 :x y2 :y}]
   (let [width (inc (Math/abs (- x2 x1)))
         height (inc (Math/abs (- y2 y1)))]
     (* width height)))
 
 (defn largest-rect-brute
-  [points]
-  (let [point-pairs (for [p1 points
-                          p2 points
+  [raw-points]
+  (let [points-map (points-as-map raw-points)
+        point-pairs (for [p1 points-map
+                          p2 points-map
                           :when (not= p1 p2)]
                       [p1 p2])
         valid-areas (map (fn [[p1 p2]]
@@ -62,161 +73,6 @@
        result#)
     `(do ~@body)))
 
-(defn lines-to-points
-  [lines]
-  (apply set/union
-         (map (fn [{x-maybe-range :x y-maybe-range :y}]
-                (set (for [x (if (seqable? x-maybe-range)
-                               x-maybe-range
-                               [x-maybe-range])
-                           y (if (seqable? y-maybe-range)
-                               y-maybe-range
-                               [y-maybe-range])]
-                       [x y])))
-              lines)))
-
-(defn get-max-y-for-x
-  [horiz-lines x & {:keys [default-if-none]
-                    :or {default-if-none 0}}]
-  (let [relevant-lines (filter (fn [{x-range :x}]
-                                 (and (<= (first x-range) x)
-                                      (>= (second x-range) x)))
-                               horiz-lines)
-        max-y-line (when (seq relevant-lines)
-                     (apply max-key
-                            (fn [{y :y}] y)
-                            relevant-lines))]
-    (if (nil? max-y-line)
-      default-if-none
-      (:y max-y-line))))
-
-(defn get-max-y-for-xs
-  [horiz-lines xs & {:keys [default-if-none]
-                     :or {default-if-none 0}}]
-  (or (apply merge
-             (map (fn [x]
-                    (let [max-y (get-max-y-for-x horiz-lines
-                                                 x
-                                                 :default-if-none default-if-none)]
-                      {x max-y}))
-                  xs))
-      {}))
-
-(defn max-y-in-range
-  [max-y-per-xs x-range]
-  (let [[min-x max-x] [(apply min x-range)
-                       (apply max x-range)]
-        ys (map (fn [[x y]]
-                  (if (<= min-x x max-x)
-                    y ; some y can be nil if no lines exist at that x
-                    0))
-                max-y-per-xs)]
-    (if (and (seq ys)
-             (every? (complement nil?) ys))
-      (apply max ys)
-      nil)))
-
-(defn pair-point-and-get-max-area
-  [pt other-pts max-y-per-xs x-bounds]
-  ;; (println "Pairing point" pt " with " other-pts " and x-bounds " x-bounds " where max-y-per-xs is " max-y-per-xs)
-  (let [[px py] pt
-        [min-x max-x] x-bounds
-        valid-pts (filter (fn [[ox oy]]
-                            (and (<= min-x ox max-x)
-                                 (<= oy py)
-                                 (= oy (max-y-per-xs ox))))
-                          other-pts)
-        valid-areas (doall (for [[ox oy] valid-pts
-                                 :let [max-y (max-y-in-range max-y-per-xs [px ox])]
-                                 :when (or (and (not (nil? max-y))
-                                                (<= max-y oy))
-                                           (and (nil? max-y)
-                                                (= oy py)))
-                                 :let [area-val (area pt [ox oy])]]
-                             area-val))]
-    (if (seq valid-areas)
-      (apply max valid-areas)
-      0)))
-
-(defn find-max-rect-of-line
-  "Assuming lines are pre-sorted appropriately and horiz-line is traversed
-in low-to-high y order"
-  [horiz-line all-vert-lines all-horiz-lines]
-  ;; (println "Considering horiz line:" horiz-line " with vert lines:" all-vert-lines " and horiz lines:" all-horiz-lines)
-  (let [{hy :y} horiz-line
-        anchor-pts (spy "anchor-pts"
-                        (map (fn [[x y]]
-                               {:point [x y]
-                                :x-boundary [(find-first-vert all-vert-lines
-                                                              x
-                                                              hy
-                                                              :left)
-                                             (find-first-vert all-vert-lines
-                                                              x
-                                                              hy
-                                                              :right)]})
-                             (lines-to-points [horiz-line])))
-        eq-horiz-lines (spy "eq-horiz-lines"
-                            (filter (fn [{ly :y}]
-                                      (= ly hy))
-                                    all-horiz-lines))
-        eq-horiz-points (spy "eq-horiz-points"
-                             (lines-to-points eq-horiz-lines))
-        lower-horiz-lines (spy "lower-horiz-lines"
-                               (filter (fn [{ly :y}]
-                                         (< ly hy))
-                                       all-horiz-lines))
-        lower-horiz-points (spy "lower-horiz-points"
-                                (lines-to-points lower-horiz-lines))
-        considering-xs (spy "considering-xs"
-                            (apply set/union (map (fn [{x-range :x}]
-                                                    (set x-range))
-                                                  (conj lower-horiz-lines horiz-line))))
-        xs-with-max-y (spy "xs-with-max-y"
-                           (get-max-y-for-xs lower-horiz-lines
-                                             considering-xs
-                                             :default-if-none nil))
-        max-area-lower-pts (spy "max-area-lower-pts"
-                                (for [{[x y] :point x-range :x-boundary} anchor-pts]
-                                  (pair-point-and-get-max-area [x y]
-                                                               lower-horiz-points
-                                                               (if (contains? xs-with-max-y x)
-                                                                 xs-with-max-y
-                                                                 (assoc xs-with-max-y x y))
-                                                               x-range)))
-        final-max-lower (if (seq max-area-lower-pts)
-                          (apply max max-area-lower-pts)
-                          0)
-
-        xs-with-max-y-eq (spy "xs-with-max-y-eq"
-                              (get-max-y-for-xs eq-horiz-lines
-                                                (apply set/union (map (fn [{x-range :x}]
-                                                                        (set x-range))
-                                                                      eq-horiz-lines))
-                                                :default-if-none hy))
-        max-area-eq-pts (spy "max-area-eq-pts"
-                             (for [pt anchor-pts]
-                               (pair-point-and-get-max-area (:point pt)
-                                                            eq-horiz-points
-                                                            xs-with-max-y-eq
-                                                            (:x-boundary pt))))
-
-        final-max-eq (if (seq max-area-eq-pts)
-                       (apply max max-area-eq-pts)
-                       0)]
-    ;; (println "Max lower:" final-max-lower " Max eq:" final-max-eq)
-    (max final-max-lower final-max-eq)))
-
-(defn make-point
-  [x y]
-  {:x x
-   :y y})
-
-(defn points-as-map [vec-points]
-  (vec (map (fn [[x y]]
-              (make-point x y))
-            vec-points)))
-
 (defn make-line
   [p1 p2]
   (let [orientation (if (= (first p1) (first p2))
@@ -229,145 +85,260 @@ in low-to-high y order"
      :points points}))
 
 (defn lines-from-points [points]
-  (let [points-map (points-as-map points)]
-    (map make-line
-         points-map
-         (conj (vec (rest points-map)) (first points-map)))))
+  (map make-line
+       points
+       (conj (vec (rest points)) (first points))))
 
-(defn intersecting-point?
-  "Return the midpoint of intersection if lines intersect, else nil"
-  [line1 line2]
-  (let [{l1-orientation :orientation
-         [l1p1 l1p2] :points} line1
-        {l2-orientation :orientation
-         [l2p1 l2p2] :points} line2]
-    (when (not= l1-orientation l2-orientation)
-      (cond (= :vertical l1-orientation)
-            (when (and (<= (:y l1p1)
-                           (:y l2p1)
-                           (:y l1p2))
-                       (<= (:x l2p1)
-                           (:x l1p1)
-                           (:x l2p2)))
-              {:x (:x l1p1)
-               :y (:y l2p1)})
+(defn line-ymin [line]
+  (let [{[{y1 :y} {y2 :y}] :points} line]
+    (min y1 y2)))
+
+(defn line-ymax [line]
+  (let [{[{y1 :y} {y2 :y}] :points} line]
+    (max y1 y2)))
+
+(defn line-xmin [line]
+  (let [{[{x1 :x} {x2 :x}] :points} line]
+    (min x1 x2)))
+
+(defn line-xmax [line]
+  (let [{[{x1 :x} {x2 :x}] :points} line]
+    (max x1 x2)))
+
+(defn point-on-lines?
+  [point lines]
+  (let [{px :x
+         py :y} point]
+    (some (fn [{orientation :orientation
+                points :points}]
+            (case orientation
+              :vertical (let [line-x (:x (first points))
+                              min-y (:y (first points))
+                              max-y (:y (second points))]
+                          (and (= line-x px)
+                               (<= min-y py max-y)))
+              :horizontal (let [line-y (:y (first points))
+                                min-x (:x (first points))
+                                max-x (:x (second points))]
+                            (and (= line-y py)
+                                 (<= min-x px max-x)))))
+          lines)))
+
+(defn is-vert-lines-on-same-side-of-y?
+  "only works for two vertical lines having an end at y"
+  [v1 v2 y]
+  (let [v1-ymin (line-ymin v1)
+        v1-ymax (line-ymax v1)
+        v2-ymin (line-ymin v2)
+        v2-ymax (line-ymax v2)]
+    (when (or (and (not= v1-ymin y)
+                   (not= v1-ymax y))
+              (and (not= v2-ymin y)
+                   (not= v2-ymax y)))
+      (throw (Exception. "Lines do not have an end at y")))
+
+    (cond
+      (or (and (= v1-ymin y)
+               (= v2-ymin y))
+          (and (= v1-ymax y)
+               (= v2-ymax y))) true
+
+      :else false)))
+
+(defn in-out-finder-reducer
+  [x-to-vert-line]
+  (let [toggle-state (fn [state]
+                       (case state
+                         :inside :outside
+                         :outside :inside))]
+    (fn [{cur-state :state
+          on-horiz-line? :on-horiz-line? ;; nil if not on horiz line, else a map of {:pre-line-state ..., :line ...}
+          remain-horiz :horiz ;; assuming sorted by x
+          :as acc}
+         x]
+      (cond (nil? on-horiz-line?)
+            (let [fst-line (if (seq remain-horiz)
+                             (first remain-horiz)
+                             (make-line
+                              (make-point Long/MAX_VALUE Long/MAX_VALUE)
+                              (make-point Long/MAX_VALUE Long/MAX_VALUE))) ;; dummy horiz line far right
+                  fx1 (line-xmin fst-line)
+                  fx2 (line-xmax fst-line)
+                  vert-line-at-x (get x-to-vert-line x)]
+              (if (and (<= fx1 x) (< x fx2))
+               ;; on the horiz line -> inside
+                {:state :inside
+                 :on-horiz-line? {:line (first remain-horiz) :pre-line-state cur-state}
+                 :horiz (rest remain-horiz)}
+                {:state (if (not (nil? vert-line-at-x))
+                          (toggle-state cur-state) ;; passed a vert line
+                          cur-state)
+                 :on-horiz-line? nil
+                 :horiz remain-horiz}))
 
             :else
-            (when (and (<= (:x l1p1)
-                           (:x l2p1)
-                           (:x l1p2))
-                       (<= (:y l2p1)
-                           (:y l1p1)
-                           (:y l2p2)))
-              {:x (:x l2p1)
-               :y (:y l1p1)})))))
+            (let [{cur-horiz-line :line
+                   pre-line-state :pre-line-state} on-horiz-line?
+                  vert-line-at-x (get x-to-vert-line x)
+                  hx1 (line-xmin cur-horiz-line)
+                  hx2 (line-xmax cur-horiz-line)
+                  hy (line-ymin cur-horiz-line)
+                  vert-line-at-hx1 (get x-to-vert-line hx1)]
+              (cond (and (< hx1 x) (< x hx2))
+                    acc
 
-(defn break-lines-from-intersections
-  [lines]
-  (let [vertical-lines (filter #(= :vertical (:orientation %)) lines)
-        horizontal-lines (filter #(= :horizontal (:orientation %)) lines)
-        separated-lines (apply concat
-                               (for [v-line vertical-lines
-                                     h-line horizontal-lines
-                                     :let [intersect-point (intersecting-point? v-line h-line)]
-                                     :when (not (nil? intersect-point))
-                                     :let [vx (:x (first (:points v-line)))
-                                           vy1 (:y (first (:points v-line)))
-                                           vy2 (:y (second (:points v-line)))
+                    (= x hx2)
+                    {:state (if (not (is-vert-lines-on-same-side-of-y?
+                                      vert-line-at-hx1
+                                      vert-line-at-x
+                                      hy))
+                              ;; if the vert line at the earlier end has different side (one is up and one is down, for ex)
+                              ;; then, when we exit the horiz line, we need to toggle the state "before" we enter the horiz line
+                              (toggle-state pre-line-state)
+                              pre-line-state)
+                     :on-horiz-line? nil
+                     :horiz remain-horiz}))))))
 
-                                           hx1 (:x (first (:points h-line)))
-                                           hx2 (:x (second (:points h-line)))
-                                           hy (:y (first (:points h-line)))
+(defn is-xs-on-same-y-in-shape?
+  "Assuming horizontal lines are sorted by x"
+  [xs horiz-lines-at-y x-to-vert-line]
+  (let [;; alternating between inside and outside as we pass each line
+        ;; an intuition is that whenever we encounter a vertical line at x < px
+        ;; then we are inside if we were outside before, and vice versa
+        tmp-x-in-shape-result (reductions (in-out-finder-reducer x-to-vert-line)
+                                          {:state :outside
+                                           :on-horiz-line? nil
+                                           :horiz horiz-lines-at-y}
+                                          xs)
+        x-in-shape-map (apply merge
+                              (map (fn [{state :state} x]
+                                     {x (= state :inside)})
+                                   (rest tmp-x-in-shape-result) ;; skip initial acc
+                                   xs))]
+    x-in-shape-map))
 
-                                           v-line1 (make-line
-                                                    (make-point vx vy1)
-                                                    (make-point vx (:y intersect-point)))
-                                           v-line2 (make-line
-                                                    (make-point vx (:y intersect-point))
-                                                    (make-point vx vy2))
-                                           h-line1 (make-line
-                                                    (make-point hx1 hy)
-                                                    (make-point (:x intersect-point) hy))
-                                           h-line2 (make-line
-                                                    (make-point (:x intersect-point) hy)
-                                                    (make-point hx2 hy))]]
-                                 (filter #(not= (first (:points %)) (second (:points %)))
-                                         [v-line1 v-line2 h-line1 h-line2])))]
-    (vec (set separated-lines))))
+(defn all-rect-edges-points
+  [rp1 rp2 all-anchor-xs all-anchor-ys]
+  (let [{x1 :x y1 :y} rp1
+        {x2 :x y2 :y} rp2
+        min-x (min x1 x2)
+        max-x (max x1 x2)
+        min-y (min y1 y2)
+        max-y (max y1 y2)]
+    (for [ax all-anchor-xs
+          ay all-anchor-ys
+          :when (and (<= min-x ax max-x)
+                     (<= min-y ay max-y)
+                     (or (= ax min-x)
+                         (= ax max-x)
+                         (= ay min-y)
+                         (= ay max-y)))]
+      (make-point ax ay))))
 
-(defn overlapping-lines?
-  [line1 line2]
-  (let [{l1-orientation :orientation
-         [l1p1 l1p2] :points} line1
-        {l2-orientation :orientation
-         [l2p1 l2p2] :points} line2]
-    (and (= l1-orientation l2-orientation)
-         (cond (= :vertical l1-orientation)
-               (or (<= (:x l1p1) (:x l2p1) (:x l1p2))
-                   (<= (:x l2p1) (:x l1p1) (:x l2p2)))
+(defn points-in-shape-reducer
+  "assume vertical lines are sorted by ymin,ymax
+   while horizontal lines are sorted by xmin,xmax"
+  [horiz-lines xs]
+  (let [y-to-horiz-lines (group-by #(get-in % [:points 0 :y])
+                                   horiz-lines)]
+    (fn [{points-in-shape :points-in-shape
+          cur-x-to-vert-line :x-to-vert-lines
+          cur-vert-lines :vert-lines}
+         cur-y]
+      ;; (println "Processing y =" cur-y "with" (count cur-vert-lines) "remaining vert lines")
+      ;; (println "current x to vert lines:" cur-x-to-vert-line)
+      ;; (println "current points-in-shape:" points-in-shape)
+      (let [new-vert-lines (take-while #(<= (line-ymin %) cur-y) cur-vert-lines)
+            remaining-vert-lines (drop-while #(<= (line-ymin %) cur-y) cur-vert-lines)
+            x-to-new-vert-line (apply merge
+                                      (map (fn [{points :points :as line}]
+                                             {(get-in points [0 :x]) line})
+                                           new-vert-lines))
+            new-x-to-vert-line (->> (merge cur-x-to-vert-line x-to-new-vert-line)
+                                    (filter (fn [[_ line]]
+                                              (>= (line-ymax line) cur-y)))
+                                    (map (fn [[x line]] {x line}))
+                                    (apply merge))
+            horiz-lines-at-y (get y-to-horiz-lines cur-y [])
+            x-in-shape-map (is-xs-on-same-y-in-shape? xs
+                                                      horiz-lines-at-y
+                                                      new-x-to-vert-line)]
+        ;; (println "at y =" cur-y " found xs-in-shape:" x-in-shape-map)
+        {:points-in-shape (concat points-in-shape
+                                  (for [x xs
+                                        :when (get x-in-shape-map x)]
+                                    (make-point x cur-y)))
+         :x-to-vert-lines new-x-to-vert-line
+         :vert-lines remaining-vert-lines}))))
 
-               :else
-               (or (<= (:y l1p1) (:y l2p1) (:y l1p2))
-                   (<= (:y l2p1) (:y l1p1) (:y l2p2)))))))
+(defn largest-rect-inside-shape
+  [raw-points]
+  (let [points-map (points-as-map raw-points)
+        lines (lines-from-points points-map)
+        ;; for every x (or y), add points preceding and succeeding each coord
+        ;; so the check for whether a rect is inside the shape is more robust
+        all-anchor-xs  (vec (sort (set (mapcat (fn [{[{px1 :x} {px2 :x}] :points}]
+                                                 [px1 (inc px1)
+                                                  px2 (inc px2)])
+                                               lines))))
+        all-anchor-ys (vec (sort (set (mapcat (fn [{[{py1 :y} {py2 :y}] :points}]
+                                                [py1 (inc py1)
+                                                 py2 (inc py2)])
+                                              lines))))
 
-(defn largest-red-green-rect
-  [points]
-  ;;
-  (let [lines (map #(vector %1 %2)
-                   points
-                   (conj (vec (rest points)) (first points)))
-        vert-lines (sort-by #(vector (:x %) (:y %))
-                            (->> lines
-                                 (filter (fn [[[x1 _] [x2 _]]]
-                                           (= x1 x2)))
-                                 (map (fn [[[lx1 ly1] [_ ly2]]]
-                                        {:dir :vertical
-                                         :x lx1
-                                         :y [(min ly1 ly2) (max ly1 ly2)]}))))
-        horiz-lines (sort-by #(vector (:y %) (:x %))
-                             (->> lines
-                                  (filter (fn [[[_ y1] [_ y2]]]
-                                            (= y1 y2)))
-                                  (map (fn [[[lx1 ly1] [lx2 _]]]
-                                         {:dir :horizontal
-                                          :y ly1
-                                          :x [(min lx1 lx2) (max lx1 lx2)]}))))
-        maxes (map (fn [horiz-line]
-                     (find-max-rect-of-line horiz-line
-                                            vert-lines
-                                            horiz-lines))
-                   horiz-lines)]
-    (if (seq maxes)
-      (apply max maxes)
-      0)))
+        ;; vertical lines sorted by ymin,ymax
+        vert-lines (sort-by (fn [line]
+                              [(line-ymin line)
+                               (line-ymax line)])
+                            (filter #(= (:orientation %) :vertical) lines))
+        ;; horizontal lines sorted by xmin,xmax
+        horiz-lines (sort-by (fn [line]
+                               [(line-xmin line)
+                                (line-xmax line)])
+                             (filter #(= (:orientation %) :horizontal) lines))
+
+        points-in-shape-result (reduce (points-in-shape-reducer horiz-lines
+                                                                all-anchor-xs)
+                                       {:points-in-shape []
+                                        :x-to-vert-lines {}
+                                        :vert-lines vert-lines}
+                                       all-anchor-ys)
+        points-in-shape-set (set (:points-in-shape points-in-shape-result))
+        valid-rect-areas (for [rp1 points-map
+                               rp2 points-map
+                               :when (not= rp1 rp2)
+                               :let [rect-points (all-rect-edges-points rp1
+                                                                        rp2
+                                                                        all-anchor-xs
+                                                                        all-anchor-ys)
+                                     all-points-in-shape? (every? points-in-shape-set rect-points)]
+                               ;; :when all-points-in-shape?
+                               ]
+                           (do
+                             ;; (println "Checking rect:" rp1 rp2 "with rect points count:" (count rect-points) "all in shape?" all-points-in-shape?)
+                             ;; (println "rect points:" rect-points)
+                             (if all-points-in-shape?
+                               (area rp1 rp2)
+                               0)))]
+    ;; (println "[pre-return] logging intermediates:")
+    ;; (println "all-anchor-xs:" all-anchor-xs)
+    ;; (println "all-anchor-ys:" all-anchor-ys)
+    ;; (println "max-lines-per-x" (apply max (map count (vals x-to-vert-lines))))
+    ;; (println "max-lines-per-y" (apply max (map count (vals y-to-horiz-lines))))
+    ;; (println "x-to-vert-lines:" x-to-vert-lines)
+    ;; (println "y-to-horiz-lines:" y-to-horiz-lines)
+    ;; (println "points-in-shape count:" (count points-in-shape))
+    ;; (println "points-in-shape sample:" (take 10 (sort-by #(vector (:y %) (:x %)) points-in-shape)))
+    (println "final max:" (apply max valid-rect-areas))
+    (apply max valid-rect-areas)))
 
 (def sample-input (parse-input "2025/day9_sample.txt"))
-
-;;
-;; This sample looks like this:
-;; ..............................
-;; .......#000#..................
-;; .......0...0..................
-;; ..#0000#000#..................
-;; ..0........0..................
-;; #0#000000#.0..................
-;; 0.0......0.0..................
-;; ###000000#0#..................
-;; .0.......0....................
-;; .0.......0....................
-;; .0.......0....................
-;; .0.......0....................
-;; .#0000000#....................
-;; ..............................
-(def hand-sample-input (parse-input "2025/day9_sample2.txt"))
 (def real-input (parse-input "2025/day9_input.txt"))
-
-(def sample-input-lines (lines-from-points sample-input))
-(def real-input-lines (lines-from-points real-input))
+(def sample-input2 (parse-input "2025/day9_sample2.txt"))
 
 (def part1-sample-brute (largest-rect-brute sample-input))
 (def part1-real-brute (largest-rect-brute real-input))
 
-(def part2-sample-red-green (largest-red-green-rect sample-input))
-(def part2-sample2-red-green (largest-red-green-rect hand-sample-input))
-;; (def part2-real-red-green (largest-red-green-rect real-input))
+(def part2-sample-red-green (largest-rect-inside-shape sample-input))
+(def part2-sample2-red-green (largest-rect-inside-shape sample-input2))
+(def part2-real-red-green (largest-rect-inside-shape real-input))
