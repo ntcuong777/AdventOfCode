@@ -207,6 +207,109 @@ in low-to-high y order"
     ;; (println "Max lower:" final-max-lower " Max eq:" final-max-eq)
     (max final-max-lower final-max-eq)))
 
+(defn make-point
+  [x y]
+  {:x x
+   :y y})
+
+(defn points-as-map [vec-points]
+  (vec (map (fn [[x y]]
+              (make-point x y))
+            vec-points)))
+
+(defn make-line
+  [p1 p2]
+  (let [orientation (if (= (first p1) (first p2))
+                      :vertical
+                      :horizontal)
+        points (if (= orientation :vertical)
+                 (vec (sort-by :y [p1 p2]))
+                 (vec (sort-by :x [p1 p2])))]
+    {:orientation orientation
+     :points points}))
+
+(defn lines-from-points [points]
+  (let [points-map (points-as-map points)]
+    (map make-line
+         points-map
+         (conj (vec (rest points-map)) (first points-map)))))
+
+(defn intersecting-point?
+  "Return the midpoint of intersection if lines intersect, else nil"
+  [line1 line2]
+  (let [{l1-orientation :orientation
+         [l1p1 l1p2] :points} line1
+        {l2-orientation :orientation
+         [l2p1 l2p2] :points} line2]
+    (when (not= l1-orientation l2-orientation)
+      (cond (= :vertical l1-orientation)
+            (when (and (<= (:y l1p1)
+                           (:y l2p1)
+                           (:y l1p2))
+                       (<= (:x l2p1)
+                           (:x l1p1)
+                           (:x l2p2)))
+              {:x (:x l1p1)
+               :y (:y l2p1)})
+
+            :else
+            (when (and (<= (:x l1p1)
+                           (:x l2p1)
+                           (:x l1p2))
+                       (<= (:y l2p1)
+                           (:y l1p1)
+                           (:y l2p2)))
+              {:x (:x l2p1)
+               :y (:y l1p1)})))))
+
+(defn break-lines-from-intersections
+  [lines]
+  (let [vertical-lines (filter #(= :vertical (:orientation %)) lines)
+        horizontal-lines (filter #(= :horizontal (:orientation %)) lines)
+        separated-lines (apply concat
+                               (for [v-line vertical-lines
+                                     h-line horizontal-lines
+                                     :let [intersect-point (intersecting-point? v-line h-line)]
+                                     :when (not (nil? intersect-point))
+                                     :let [vx (:x (first (:points v-line)))
+                                           vy1 (:y (first (:points v-line)))
+                                           vy2 (:y (second (:points v-line)))
+
+                                           hx1 (:x (first (:points h-line)))
+                                           hx2 (:x (second (:points h-line)))
+                                           hy (:y (first (:points h-line)))
+
+                                           v-line1 (make-line
+                                                    (make-point vx vy1)
+                                                    (make-point vx (:y intersect-point)))
+                                           v-line2 (make-line
+                                                    (make-point vx (:y intersect-point))
+                                                    (make-point vx vy2))
+                                           h-line1 (make-line
+                                                    (make-point hx1 hy)
+                                                    (make-point (:x intersect-point) hy))
+                                           h-line2 (make-line
+                                                    (make-point (:x intersect-point) hy)
+                                                    (make-point hx2 hy))]]
+                                 (filter #(not= (first (:points %)) (second (:points %)))
+                                         [v-line1 v-line2 h-line1 h-line2])))]
+    (vec (set separated-lines))))
+
+(defn overlapping-lines?
+  [line1 line2]
+  (let [{l1-orientation :orientation
+         [l1p1 l1p2] :points} line1
+        {l2-orientation :orientation
+         [l2p1 l2p2] :points} line2]
+    (and (= l1-orientation l2-orientation)
+         (cond (= :vertical l1-orientation)
+               (or (<= (:x l1p1) (:x l2p1) (:x l1p2))
+                   (<= (:x l2p1) (:x l1p1) (:x l2p2)))
+
+               :else
+               (or (<= (:y l1p1) (:y l2p1) (:y l1p2))
+                   (<= (:y l2p1) (:y l1p1) (:y l2p2)))))))
+
 (defn largest-red-green-rect
   [points]
   ;;
@@ -258,6 +361,9 @@ in low-to-high y order"
 ;; ..............................
 (def hand-sample-input (parse-input "2025/day9_sample2.txt"))
 (def real-input (parse-input "2025/day9_input.txt"))
+
+(def sample-input-lines (lines-from-points sample-input))
+(def real-input-lines (lines-from-points real-input))
 
 (def part1-sample-brute (largest-rect-brute sample-input))
 (def part1-real-brute (largest-rect-brute real-input))
