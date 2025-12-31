@@ -2,6 +2,19 @@
   (:require [clojure.string :as str]
             [clojure.set :as set]))
 
+;;
+;; TODO:
+;; Peaked at the right solution for part 2 on reddit
+;; I feel stupid for not spending more time on it
+;; so I would skip part 2 for now
+;; maybe will come back later
+;; when I forget the solution I saw
+;; and attempt to solve it myself
+;;
+;; Not that seeing the correct solution is a bad thing
+;; just that my stupid ego hurts a bit
+;;
+
 (defn parse-light-spec
   [light-spec]
   (let [cleaned-spec (str/replace light-spec #"^\[|\]$" "")]
@@ -23,7 +36,8 @@
                                      button-nums)]
     button-toggle-states))
 
-(defn parse-data-line [line-data]
+(defn parse-data-line
+  [line-data]
   (let [final-lights (first line-data)
         buttons (rest (butlast line-data))
         joltage (last line-data)]
@@ -31,7 +45,8 @@
      :buttons (vec (map parse-button buttons))
      :joltage joltage}))
 
-(defn parse-input [inp-file]
+(defn parse-input
+  [inp-file]
   (->> (slurp inp-file)
        str/split-lines
        (map #(str/split % #"\s+"))
