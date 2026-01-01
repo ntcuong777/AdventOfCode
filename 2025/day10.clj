@@ -127,12 +127,12 @@
            valid-joltage-configs {}]
       (if (= button-state (bit-shift-left 1 num-buttons))
         valid-joltage-configs
-        (let [[valid-presses final-joltage] (check-valid-presses-for-joltage
-                                             button-state
-                                             buttons
-                                             joltage)
+        (let [[is-valid-presses? final-joltage] (check-valid-presses-for-joltage
+                                                 button-state
+                                                 buttons
+                                                 joltage)
               num-presses (Long/bitCount button-state)]
-          (if valid-presses
+          (if is-valid-presses?
             (let [new-joltage-configs (assoc valid-joltage-configs
                                              button-state
                                              {:num-presses num-presses
@@ -162,7 +162,7 @@
                                buttons
                                joltage)]
       ;; (println "new configs:" new-joltage-configs)
-      ;; (println "num configs:" (count new-joltage-configs) "new configs:" new-joltage-configs "for joltage:" joltage "and buttons" buttons)
+      (println "num configs:" (count new-joltage-configs) "new configs:" new-joltage-configs "for joltage:" joltage "and buttons" buttons)
       (if (empty? new-joltage-configs)
         infinite
         (apply min (map (fn [[_button-state {:keys [num-presses joltage]}]]
