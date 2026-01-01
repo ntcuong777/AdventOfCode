@@ -85,6 +85,14 @@
 ;; of odd xi once, then we can halve the remaining even integers and solve
 ;; the same problem again.
 ;;
+;; When the joltage config is all even, we can either:
+;; (1) halve all the joltages and solve the same problem again
+;; (2) press some buttons to make even joltages, then halve and solve again
+;;
+;; NOTE: Utilizing memoization to speed up the recursive calls
+;; as the resulting solution is still a backtracking search over
+;; possible button presses.
+;;
 
 (defn all-even
   [nums]
@@ -120,10 +128,10 @@
           []
           (zipmap (range) buttons)))
 
-(defn find-buttons-for-odd-joltages
+(defn find-buttons-to-make-even-joltages
   [buttons joltage]
   (let [num-buttons (count buttons)]
-    (loop [button-state 0
+    (loop [button-state 1  ;; force at least one button pressed
            valid-joltage-configs {}]
       (if (= button-state (bit-shift-left 1 num-buttons))
         valid-joltage-configs
@@ -150,28 +158,39 @@
 
 (defn count-joltage-steps
   [{:keys [buttons joltage]}]
-  (if (all-even joltage)
-    (if (every? #(= % 0) joltage)
-      0
-      (let [count (count-joltage-steps {:buttons buttons
-                                        :joltage (halve-joltage joltage)})]
-        (if (= count infinite)
-          infinite
-          (* 2 count))))
-    (let [new-joltage-configs (find-buttons-for-odd-joltages
-                               buttons
-                               joltage)]
-      ;; (println "new configs:" new-joltage-configs)
-      (println "num configs:" (count new-joltage-configs) "new configs:" new-joltage-configs "for joltage:" joltage "and buttons" buttons)
-      (if (empty? new-joltage-configs)
-        infinite
-        (apply min (map (fn [[_button-state {:keys [num-presses joltage]}]]
-                          (let [count-config (count-joltage-steps {:buttons buttons
-                                                                   :joltage joltage})]
-                            (if (= count-config infinite)
-                              infinite
-                              (+ num-presses count-config))))
-                        new-joltage-configs))))))
+  (letfn [(count-joltage-steps-inner
+            [{:keys [buttons joltage]}]
+            (if (every? #(= % 0) joltage)
+              0
+              (let [raw-count-halved (if (all-even joltage)
+                                       (memoized-count-joltage-steps {:buttons buttons
+                                                                      :joltage (halve-joltage joltage)})
+                                       infinite)
+                    count-halved (if (= raw-count-halved infinite)
+                                   infinite
+                                   (* 2 raw-count-halved))
+                    count-after-pressing (let [new-joltage-configs (find-buttons-to-make-even-joltages
+                                                                    buttons
+                                                                    joltage)]
+                                           ;; (println "new configs:" new-joltage-configs)
+                                           ;; (println "num configs:" (count new-joltage-configs) "new configs:" new-joltage-configs "for joltage:" joltage "and buttons" buttons)
+                                           (if (empty? new-joltage-configs)
+                                             infinite
+                                             (apply min (map (fn [[_button-state {:keys [num-presses joltage]}]]
+                                                               (let [count-config (memoized-count-joltage-steps {:buttons buttons
+                                                                                                                 :joltage joltage})]
+                                                                 (if (= count-config infinite)
+                                                                   infinite
+                                                                   (+ num-presses count-config))))
+                                                             new-joltage-configs))))]
+                (min count-halved count-after-pressing))))
+
+          (memoized-count-joltage-steps
+            [args]
+            (let [f (memoize count-joltage-steps-inner)]
+              (f args)))]
+    (memoized-count-joltage-steps {:buttons buttons
+                                   :joltage joltage})))
 
 (def sample-input (parse-input "2025/day10_sample.txt"))
 (def real-input (parse-input "2025/day10_input.txt"))
@@ -182,4 +201,4 @@
 
 (defn part-2
   [input-data]
-  (reduce + (map count-joltage-steps input-data)))
+  (reduce + (map (memoize count-joltage-steps) input-data)))
