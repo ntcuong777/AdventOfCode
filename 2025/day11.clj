@@ -2,6 +2,13 @@
   (:require [clojure.string :as str]
             [clojure.set :as set]))
 
+;;
+;; REMARK: This solution assumes that the input graph is a Directed Acyclic Graph (DAG).
+;; If the input graph contains cycles, the path counting logic would need to be adjusted
+;; to detect cycles. It can be done by checking if BFS visits a node of lower depth
+;; than the current node when traveling the graph from the start node.
+;;
+
 (defn parse-graph
   [line]
   (let [[node neighbors-str] (str/split line #": ")
