@@ -10,6 +10,8 @@
 ;; But as my time is limited and I mostly want to solve the problems for fun,
 ;; I'm providing a fake solution that just counts the number of regions
 ;; that could possibly fit the shapes based on area only.
+;; The input of Day 12 is actually purposely designed to be simple enough
+;; that this no-brainer solution gives the correct answer for the actual input.
 ;;
 ;; Potentially, I will work on the real solution in the future when I have more time.
 ;; But, well, life is short and busy for everyone and I want to prioritize focusing on feeding
